@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from app.db.mongo import get_news_collection
 from app.schemas.news_document import build_news_document
+from app.services.news_prefilter import classify_news
 
 
 BASE_URL = "https://www.ozgurkocaeli.com.tr"
@@ -28,7 +29,7 @@ session.headers.update({
 
 
 def wait_between_requests():
-    time.sleep(random.uniform(2.5, 4.5))
+    time.sleep(random.uniform(2.0, 3.5))
 
 
 def fetch_html(url):
@@ -197,7 +198,7 @@ def save_article(collection, article_data):
     news_document = build_news_document(
         title=article_data["title"],
         content=article_data["content"],
-        news_type="Bilinmiyor",
+        news_type=article_data["news_type"],
         publish_date=article_data["publish_date"],
         location_text="",
         district="",
@@ -247,6 +248,7 @@ def run():
     skipped_count = 0
     http_failed_count = 0
     parse_failed_count = 0
+    filtered_out_count = 0
 
     for index, item in enumerate(all_article_items, start=1):
         article_url = item["url"]
@@ -274,9 +276,22 @@ def run():
                 parse_failed_count += 1
             continue
 
+        news_type, score = classify_news(
+            article_data["title"],
+            article_data["content"]
+        )
+
+        if not news_type:
+            filtered_out_count += 1
+            print("On filtreye takildi, DB'ye yazilmadi")
+            continue
+
+        article_data["news_type"] = news_type
+
         try:
             save_article(collection, article_data)
             inserted_count += 1
+            print(f"Kaydedildi -> {news_type} (skor: {score})")
         except Exception as exc:
             parse_failed_count += 1
             save_failed_url(article_url, f"mongo_error:{exc}")
@@ -285,6 +300,7 @@ def run():
     print("Islem tamamlandi.")
     print(f"MongoDB'ye eklenen: {inserted_count}")
     print(f"Duplicate oldugu icin atlanan: {skipped_count}")
+    print(f"On filtre nedeniyle elenen: {filtered_out_count}")
     print(f"HTTP nedeniyle okunamayan: {http_failed_count}")
     print(f"Parse / veri nedeniyle okunamayan: {parse_failed_count}")
     print(f"Arsiv HTTP hatasi sayisi: {archive_http_fail_count}")

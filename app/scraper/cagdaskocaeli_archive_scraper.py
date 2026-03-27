@@ -1,9 +1,8 @@
-# app/scraper/seskocaeli_archive_scraper.py
+# app/scraper/cagdaskocaeli_archive_scraper.py
 
 import random
 import re
 import time
-from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
 import requests
@@ -14,23 +13,36 @@ from app.schemas.news_document import build_news_document
 from app.services.news_prefilter import classify_news
 
 
-BASE_URL = "https://www.seskocaeli.com"
+BASE_URL = "https://www.cagdaskocaeli.com.tr"
 START_ARCHIVE_URL = f"{BASE_URL}/arsiv"
-SITE_NAME = "Ses Kocaeli"
+SITE_NAME = "Çağdaş Kocaeli"
 DAYS_TO_FETCH = 3
 
 session = requests.Session()
 session.headers.update({
-    "User-Agent": "Python student project scraper",
-    "Accept": "text/html,application/xhtml+xml",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Referer": BASE_URL,
+    "Connection": "keep-alive",
 })
+
+
+def wait_between_requests():
+    time.sleep(random.uniform(1.5, 3.5))
 
 
 def fetch_html(url):
     try:
-        response = session.get(url, timeout=(10, 25))
+        response = session.get(url, timeout=30)
         response.raise_for_status()
-        time.sleep(random.uniform(1.5, 3.5))
+        wait_between_requests()
         return response.text
     except requests.RequestException as exc:
         print(f"Istek hatasi: {url} -> {exc}")
@@ -39,8 +51,8 @@ def fetch_html(url):
 
 def normalize_archive_date(raw_date_text):
     raw_date_text = (raw_date_text or "").strip()
-    parts = raw_date_text.split()
 
+    parts = raw_date_text.split()
     if len(parts) != 3:
         return ""
 
@@ -49,28 +61,19 @@ def normalize_archive_date(raw_date_text):
 
 
 def find_archive_date(soup):
-    for element in soup.find_all(["li", "div", "span", "p", "strong"]):
-        text = element.get_text(" ", strip=True)
+    for li_tag in soup.find_all("li"):
+        text = li_tag.get_text(" ", strip=True)
         if re.fullmatch(r"\d{1,2}\s+\d{1,2}\s+\d{4}", text):
             return normalize_archive_date(text)
     return ""
 
 
-def extract_time_from_text(text):
-    text = (text or "").strip()
-    match = re.search(r"\b(\d{2}\s*:\s*\d{2})\b", text)
-    if not match:
-        return ""
-    return match.group(1).replace(" ", "")
-
-
-def build_previous_archive_url(current_archive_date):
-    if not current_archive_date:
-        return None
-
-    current_date = datetime.strptime(current_archive_date, "%Y-%m-%d").date()
-    previous_date = current_date - timedelta(days=1)
-    return f"{BASE_URL}/arsiv/{previous_date.strftime('%Y-%m-%d')}"
+def extract_time_from_link_text(link_text):
+    link_text = (link_text or "").strip()
+    match = re.match(r"^(\d{2}:\d{2})", link_text)
+    if match:
+        return match.group(1)
+    return ""
 
 
 def get_archive_links_and_previous_page(archive_url):
@@ -86,6 +89,7 @@ def get_archive_links_and_previous_page(archive_url):
 
     for a_tag in soup.find_all("a", href=True):
         href = a_tag["href"].strip()
+
         if not href:
             continue
 
@@ -100,7 +104,7 @@ def get_archive_links_and_previous_page(archive_url):
         seen_urls.add(full_url)
 
         link_text = a_tag.get_text(" ", strip=True)
-        article_time = extract_time_from_text(link_text)
+        article_time = extract_time_from_link_text(link_text)
 
         if archive_date and article_time:
             publish_date = f"{archive_date} {article_time}"
@@ -115,13 +119,10 @@ def get_archive_links_and_previous_page(archive_url):
         })
 
     previous_day_url = None
-
     previous_day_link = soup.find("a", string=lambda text: text and "ÖNCEKİ GÜN" in text.upper())
+
     if previous_day_link and previous_day_link.get("href"):
         previous_day_url = urljoin(BASE_URL, previous_day_link.get("href"))
-
-    if not previous_day_url and archive_date:
-        previous_day_url = build_previous_archive_url(archive_date)
 
     return article_items, previous_day_url
 
@@ -142,14 +143,14 @@ def extract_article_data(article_url, publish_date):
         return None
 
     content_parts = []
-
     stop_phrases = {
         "Yazdır",
-        "Yorumlar",
+        "Muhabir",
+        "Tüm Haberleri",
+        "Yorumunuz",
         "Topluluk Kuralları",
         "Sosyal Sayfalar",
-        "Anket",
-        "GİRİŞ YAP"
+        "GALERİ"
     }
 
     for element in soup.find_all(["p", "h2", "blockquote"]):
@@ -164,7 +165,7 @@ def extract_article_data(article_url, publish_date):
         if any(stop_phrase in text for stop_phrase in stop_phrases):
             break
 
-        if len(text) < 20:
+        if len(text) < 15:
             continue
 
         content_parts.append(text)
@@ -201,7 +202,9 @@ def save_article(collection, article_data):
         lat=None,
         lng=None
     )
+
     collection.insert_one(news_document)
+    return True
 
 
 def run():
@@ -220,8 +223,7 @@ def run():
         article_items, previous_day_url = get_archive_links_and_previous_page(current_archive_url)
 
         if not article_items:
-            print(f"Arsivden link alinamadi: {current_archive_url}")
-            break
+            print(f"Arsiv sayfasindan link alinamadi: {current_archive_url}")
 
         for item in article_items:
             if item["url"] not in seen_article_urls:
@@ -243,42 +245,43 @@ def run():
 
         print(f"Isleniyor ({index}/{len(all_article_items)}): {article_url}")
 
-        if article_exists(collection, article_url):
-            skipped_count += 1
-            print("Duplicate oldugu icin atlandi")
-            continue
-
-        if not publish_date:
-            failed_count += 1
-            print("Tarih bulunamadi")
-            continue
-
-        article_data = extract_article_data(article_url, publish_date)
-
-        if not article_data:
-            failed_count += 1
-            print("Detay sayfasi okunamadi veya parse edilemedi")
-            continue
-
-        news_type, score = classify_news(
-            article_data["title"],
-            article_data["content"]
-        )
-
-        if not news_type:
-            filtered_out_count += 1
-            print("On filtreye takildi, DB'ye yazilmadi")
-            continue
-
-        article_data["news_type"] = news_type
-
         try:
+            if article_exists(collection, article_url):
+                skipped_count += 1
+                print(f"Duplicate oldugu icin atlandi: {article_url}")
+                continue
+
+            if not publish_date:
+                failed_count += 1
+                print(f"Tarih bulunamadi, atlandi: {article_url}")
+                continue
+
+            article_data = extract_article_data(article_url, publish_date)
+
+            if not article_data:
+                failed_count += 1
+                print(f"Okunamadi veya parse edilemedi: {article_url}")
+                continue
+
+            news_type, score = classify_news(
+                article_data["title"],
+                article_data["content"]
+            )
+
+            if not news_type:
+                filtered_out_count += 1
+                print(f"On filtreye takildi, DB'ye yazilmadi: {article_url}")
+                continue
+
+            article_data["news_type"] = news_type
+
             save_article(collection, article_data)
             inserted_count += 1
             print(f"Kaydedildi -> {news_type} (skor: {score})")
+
         except Exception as exc:
             failed_count += 1
-            print(f"Mongo kayit hatasi: {exc}")
+            print(f"Hata: {article_url} -> {exc}")
 
     print("Islem tamamlandi.")
     print(f"MongoDB'ye eklenen: {inserted_count}")
