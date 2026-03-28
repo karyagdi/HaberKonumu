@@ -1,4 +1,8 @@
 pymongo
 python-dotenv
 requests
-beautifulsoup4s
+beautifulsoup4
+fastapi
+uvicorn
+pymongo
+jinja2
