@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kocaeli Haber Haritası</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        .layout {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+
+        .sidebar {
+            width: 320px;
+            background: #ffffff;
+            border-right: 1px solid #ddd;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .sidebar h1 {
+            font-size: 20px;
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+
+        .filter-group {
+            margin-bottom: 12px;
+        }
+
+        .filter-group label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        .filter-group select,
+        .filter-group input,
+        .filter-group button {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        .filter-group button {
+            cursor: pointer;
+            border: none;
+            background: #2563eb;
+            color: white;
+            border-radius: 6px;
+        }
+
+        .filter-group button.secondary {
+            background: #6b7280;
+        }
+
+        .stats {
+            margin: 16px 0;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .news-list {
+            margin-top: 16px;
+        }
+
+        .news-card {
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        .news-card h3 {
+            margin: 0 0 6px 0;
+            font-size: 15px;
+        }
+
+        .news-meta {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 6px;
+        }
+
+        .news-card a {
+            display: inline-block;
+            margin-top: 6px;
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .map-area {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .warning {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #fff7ed;
+            color: #9a3412;
+            font-size: 13px;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #ddd;
+            }
+
+            .map-area {
+                height: 70vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h1>Kocaeli Haber Haritası</h1>
+
+            <div class="filter-group">
+                <label for="newsType">Haber Türü</label>
+                <select id="newsType">
+                    <option value="">Tümü</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="district">İlçe</label>
+                <select id="district">
+                    <option value="">Tümü</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="startDate">Başlangıç Tarihi</label>
+                <input type="date" id="startDate" />
+            </div>
+
+            <div class="filter-group">
+                <label for="endDate">Bitiş Tarihi</label>
+                <input type="date" id="endDate" />
+            </div>
+
+            <div class="filter-group">
+                <button id="applyFilters">Filtrele</button>
+            </div>
+
+            <div class="filter-group">
+                <button id="clearFilters" class="secondary">Filtreleri Temizle</button>
+            </div>
+
+            <div class="stats" id="stats">
+                Yükleniyor...
+            </div>
+
+            <div class="warning">
+                Not: Koordinatı eksik haberler sistem hata vermeden atlanır, haritada gösterilmez.
+            </div>
+
+            <div class="news-list" id="newsList"></div>
+        </aside>
+
+        <main class="map-area">
+            <div id="map"></div>
+        </main>
+    </div>
+
+    <script>
+        window.GOOGLE_MAPS_API_KEY = "{{ google_maps_api_key }}";
+    </script>
+    <script src="/static/app.js"></script>
+
+    {% if google_maps_api_key %}
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap">
+    </script>
+    {% else %}
+    <script>
+        alert("GOOGLE_MAPS_API_KEY .env içinde tanımlı değil.");
+    </script>
+    {% endif %}
+</body>
+</html>
