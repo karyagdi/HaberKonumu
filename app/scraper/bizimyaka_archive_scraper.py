@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from app.db.mongo import get_news_collection
 from app.schemas.news_document import build_news_document
 from app.services.news_prefilter import classify_news
+from app.services.location_extractor import extract_location_info
 
 
 BASE_URL = "https://www.bizimyaka.com"
@@ -197,18 +198,18 @@ def article_exists(collection, canonical_url):
 
 def save_article(collection, article_data):
     news_document = build_news_document(
-        title=article_data["title"],
-        content=article_data["content"],
-        news_type=article_data["news_type"],
-        publish_date=article_data["publish_date"],
-        location_text="",
-        district="",
-        site_name=SITE_NAME,
-        url=article_data["url"],
-        canonical_url=article_data["canonical_url"],
-        lat=None,
-        lng=None
-    )
+    title=article_data["title"],
+    content=article_data["content"],
+    news_type=article_data["news_type"],
+    publish_date=article_data["publish_date"],
+    location_text=article_data["location_text"],
+    district=article_data["district"],
+    site_name=SITE_NAME,
+    url=article_data["url"],
+    canonical_url=article_data["canonical_url"],
+    lat=None,
+    lng=None
+)
     collection.insert_one(news_document)
 
 
@@ -279,6 +280,15 @@ def run():
             continue
 
         article_data["news_type"] = news_type
+
+        location_info = extract_location_info(
+            article_data["title"],
+            article_data["content"]
+        )
+
+        article_data["location_text"] = location_info["location_text"]
+        article_data["district"] = location_info["district"]
+
 
         try:
             save_article(collection, article_data)

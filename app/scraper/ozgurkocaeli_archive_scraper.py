@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from app.db.mongo import get_news_collection
 from app.schemas.news_document import build_news_document
 from app.services.news_prefilter import classify_news
+from app.services.location_extractor import extract_location_info
 
 
 BASE_URL = "https://www.ozgurkocaeli.com.tr"
@@ -200,8 +201,8 @@ def save_article(collection, article_data):
         content=article_data["content"],
         news_type=article_data["news_type"],
         publish_date=article_data["publish_date"],
-        location_text="",
-        district="",
+        location_text=article_data["location_text"],
+        district=article_data["district"],
         site_name=SITE_NAME,
         url=article_data["url"],
         canonical_url=article_data["canonical_url"],
@@ -209,7 +210,6 @@ def save_article(collection, article_data):
         lng=None
     )
     collection.insert_one(news_document)
-
 
 def run():
     FAILED_URLS_PATH.write_text("", encoding="utf-8")
@@ -287,6 +287,16 @@ def run():
             continue
 
         article_data["news_type"] = news_type
+
+        location_info = extract_location_info(
+            article_data["title"],
+            article_data["content"]
+        )
+
+        article_data["location_text"] = location_info["location_text"]
+        article_data["district"] = location_info["district"]
+
+
 
         try:
             save_article(collection, article_data)
