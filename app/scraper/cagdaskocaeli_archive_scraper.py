@@ -1,5 +1,3 @@
-# app/scraper/cagdaskocaeli_archive_scraper.py
-
 import random
 import re
 import time
@@ -36,7 +34,7 @@ session.headers.update({
 
 
 def wait_between_requests():
-    time.sleep(random.uniform(1.5, 3.5))
+    time.sleep(random.uniform(1.5, 2.5))
 
 
 def fetch_html(url):
@@ -204,7 +202,6 @@ def save_article(collection, article_data):
         lng=None
     )
     collection.insert_one(news_document)
-    
     return True
 
 
@@ -239,6 +236,7 @@ def run():
     skipped_count = 0
     failed_count = 0
     filtered_out_count = 0
+    location_filtered_out_count = 0
 
     for index, item in enumerate(all_article_items, start=1):
         article_url = item["url"]
@@ -281,6 +279,11 @@ def run():
                 article_data["content"]
             )
 
+            if location_info["should_skip"]:
+                location_filtered_out_count += 1
+                print(f"Konum/Kocaeli iliskisi nedeniyle DB'ye yazilmadi: {article_url}")
+                continue
+
             article_data["district"] = location_info["district"]
             article_data["location_text"] = location_info["location_text"]
 
@@ -300,6 +303,7 @@ def run():
     print(f"MongoDB'ye eklenen: {inserted_count}")
     print(f"Duplicate oldugu icin atlanan: {skipped_count}")
     print(f"On filtre nedeniyle elenen: {filtered_out_count}")
+    print(f"Konum nedeniyle elenen: {location_filtered_out_count}")
     print(f"Okunamayan / parse edilemeyen: {failed_count}")
 
 

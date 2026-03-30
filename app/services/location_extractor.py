@@ -1,5 +1,3 @@
-# app/services/location_extractor.py
-
 import re
 import unicodedata
 
@@ -19,17 +17,75 @@ DISTRICT_ALIASES = {
     "Kandıra": ["kandira", "kandıra"],
 }
 
+KOCAELI_ALIASES = [
+    "kocaeli"
+]
+
+OUT_OF_KOCAELI_KEYWORDS = [
+    "istanbul",
+    "ankara",
+    "izmir",
+    "bursa",
+    "sakarya",
+    "yalova",
+    "düzce",
+    "adapazarı",
+    "antalya",
+    "trabzon",
+    "konya",
+    "eskişehir",
+    "edirne",
+    "tekirdağ",
+    "çanakkale",
+    "mersin",
+    "adana",
+    "gaziantep",
+    "şanlıurfa",
+    "diyarbakır",
+    "samsun",
+    "ordu",
+    "giresun",
+    "rize",
+    "artvin",
+    "muğla",
+    "aydın",
+    "balıkesir",
+    "manisa",
+    "denizli",
+    "afyon",
+    "kayseri",
+    "sivas",
+    "malatya",
+    "erzurum",
+    "van",
+    "kars",
+    "bitlis",
+    "nevşehir",
+    "kütahya",
+    "uşak",
+    "tokat",
+    "çorum"
+]
+
 TITLE_DISTRICT_WEIGHT = 3
 CONTENT_DISTRICT_WEIGHT = 1
 
-LOCATION_PATTERNS = [
+SPECIFIC_LOCATION_PATTERNS = [
     r"\b[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9'\-]+(?:\s+[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9'\-]+){0,3}\s+(?:Mahallesi|Mah\.|Sokak|Sokağı|Cadde|Caddesi|Bulvar|Bulvarı|Kavşak|Kavşağı|Köprü|Köprüsü|Yolu|Mevkii|Mevki|Durağı|Otogar|Otogarı|Parkı|Meydanı)\b",
     r"\b[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9'\-]+(?:\s+[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9'\-]+){0,4}\s+(?:Sanayi Sitesi|Organize Sanayi Bölgesi|OSB)\b",
-    r"\b(?:D-100|D100|TEM|Kuzey Marmara Otoyolu|E-5|E5)\b(?:\s+[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9'\-]+){0,3}",
 ]
 
-DISTRICT_CONTEXT_PATTERNS = [
-    r"\b(?:ilçesinde|ilcesinde|ilçesi|ilcesi|mevkiinde|mevkiinde|mevkiinde bulunan|mevkiinde yer alan)\b"
+GENERAL_LOCATION_PATTERNS = [
+    r"\b(?:D-100|D100|TEM|Kuzey Marmara Otoyolu|E-5|E5)\b",
+    r"\bokul\b",
+    r"\bfabrika\b",
+    r"\bpark\b",
+    r"\bhastane\b",
+    r"\botogar\b",
+    r"\bkampüs\b",
+    r"\bstadyum\b",
+    r"\bterminal\b",
+    r"\bçarşı\b",
 ]
 
 
@@ -47,6 +103,19 @@ def normalize_text(text):
 def count_keyword_matches(text, keyword):
     pattern = r"\b" + re.escape(keyword) + r"\b"
     return len(re.findall(pattern, text))
+
+
+def clean_location_text(text):
+    text = (text or "").strip()
+    text = re.sub(r"\s+", " ", text)
+    return text.strip(" ,.-:;()[]")
+
+
+def contains_any_keyword(text, keywords):
+    for keyword in keywords:
+        if count_keyword_matches(text, keyword) > 0:
+            return True
+    return False
 
 
 def extract_district(title, content):
@@ -80,46 +149,95 @@ def extract_district(title, content):
     return best_districts[0]
 
 
-def clean_location_text(text):
-    text = (text or "").strip()
-    text = re.sub(r"\s+", " ", text)
-    return text.strip(" ,.-:;()[]")
-
-
-def find_location_pattern(text):
-    for pattern in LOCATION_PATTERNS:
+def find_specific_location_pattern(text):
+    for pattern in SPECIFIC_LOCATION_PATTERNS:
         match = re.search(pattern, text, flags=re.IGNORECASE | re.UNICODE)
         if match:
             return clean_location_text(match.group(0))
     return ""
 
 
+def has_general_location_pattern(text):
+    for pattern in GENERAL_LOCATION_PATTERNS:
+        if re.search(pattern, text, flags=re.IGNORECASE | re.UNICODE):
+            return True
+    return False
+
+
 def extract_location_text(title, content, district):
     title = title or ""
     content = content or ""
 
-    # 1) Önce başlıkta spesifik konum ara
-    title_location = find_location_pattern(title)
-    if title_location:
-        return title_location
+    title_specific = find_specific_location_pattern(title)
+    if title_specific:
+        return title_specific, "specific"
 
-    # 2) Sonra içerikte spesifik konum ara
-    content_location = find_location_pattern(content)
-    if content_location:
-        return content_location
+    content_specific = find_specific_location_pattern(content)
+    if content_specific:
+        return content_specific, "specific"
 
-    # 3) İlçe bulunduysa fallback olarak ilçe kullan
+    normalized_text = normalize_text(f"{title} {content}")
+
     if district:
-        return district
+        return district, "district"
 
-    return ""
+    if contains_any_keyword(normalized_text, KOCAELI_ALIASES):
+        return "Kocaeli", "kocaeli"
+
+    if has_general_location_pattern(title) or has_general_location_pattern(content):
+        return "", "general"
+
+    return "", "none"
+
+
+def is_kocaeli_related(title, content, district):
+    normalized_text = normalize_text(f"{title} {content}")
+
+    if district:
+        return True
+
+    if contains_any_keyword(normalized_text, KOCAELI_ALIASES):
+        return True
+
+    if find_specific_location_pattern(title) or find_specific_location_pattern(content):
+        return True
+
+    if contains_any_keyword(normalized_text, OUT_OF_KOCAELI_KEYWORDS):
+        return False
+
+    return False
 
 
 def extract_location_info(title, content):
     district = extract_district(title, content)
-    location_text = extract_location_text(title, content, district)
+    is_kocaeli = is_kocaeli_related(title, content, district)
+
+    if not is_kocaeli:
+        return {
+            "district": "",
+            "location_text": "",
+            "is_kocaeli": False,
+            "should_skip": True
+        }
+
+    location_text, location_kind = extract_location_text(title, content, district)
+
+    if location_kind == "general":
+        if district:
+            location_text = district
+        else:
+            location_text = "Kocaeli"
+
+    if location_kind == "district":
+        location_text = district
+
+    if location_kind == "kocaeli":
+        district = ""
+        location_text = "Kocaeli"
 
     return {
         "district": district,
-        "location_text": location_text
+        "location_text": location_text,
+        "is_kocaeli": True,
+        "should_skip": False
     }
