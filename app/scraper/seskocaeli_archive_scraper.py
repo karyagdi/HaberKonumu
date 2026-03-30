@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from app.db.mongo import get_news_collection
 from app.schemas.news_document import build_news_document
 from app.services.news_prefilter import classify_news
+from app.services.location_extractor import extract_location_info
 
 
 BASE_URL = "https://www.seskocaeli.com"
@@ -30,7 +31,7 @@ def fetch_html(url):
     try:
         response = session.get(url, timeout=(10, 25))
         response.raise_for_status()
-        time.sleep(random.uniform(1.5, 3.5))
+        time.sleep(random.uniform(1.0, 1.5))
         return response.text
     except requests.RequestException as exc:
         print(f"Istek hatasi: {url} -> {exc}")
@@ -193,8 +194,8 @@ def save_article(collection, article_data):
         content=article_data["content"],
         news_type=article_data["news_type"],
         publish_date=article_data["publish_date"],
-        location_text="",
-        district="",
+        location_text=article_data["location_text"],
+        district=article_data["district"],
         site_name=SITE_NAME,
         url=article_data["url"],
         canonical_url=article_data["canonical_url"],
@@ -236,6 +237,7 @@ def run():
     skipped_count = 0
     failed_count = 0
     filtered_out_count = 0
+    location_filtered_out_count = 0
 
     for index, item in enumerate(all_article_items, start=1):
         article_url = item["url"]
@@ -272,10 +274,27 @@ def run():
 
         article_data["news_type"] = news_type
 
+        location_info = extract_location_info(
+            article_data["title"],
+            article_data["content"]
+        )
+
+        if location_info["should_skip"]:
+            location_filtered_out_count += 1
+            print("Kocaeli disi haber, DB'ye yazilmadi")
+            continue
+
+        article_data["location_text"] = location_info["location_text"]
+        article_data["district"] = location_info["district"]
+
         try:
             save_article(collection, article_data)
             inserted_count += 1
-            print(f"Kaydedildi -> {news_type} (skor: {score})")
+            print(
+                f"Kaydedildi -> {news_type} (skor: {score}) | "
+                f"district={article_data['district']} | "
+                f"location={article_data['location_text']}"
+            )
         except Exception as exc:
             failed_count += 1
             print(f"Mongo kayit hatasi: {exc}")
@@ -284,6 +303,7 @@ def run():
     print(f"MongoDB'ye eklenen: {inserted_count}")
     print(f"Duplicate oldugu icin atlanan: {skipped_count}")
     print(f"On filtre nedeniyle elenen: {filtered_out_count}")
+    print(f"Konum nedeniyle elenen: {location_filtered_out_count}")
     print(f"Okunamayan / parse edilemeyen: {failed_count}")
 
 
