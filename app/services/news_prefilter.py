@@ -1,5 +1,3 @@
-# app/services/news_prefilter.py
-
 import re
 import unicodedata
 
@@ -13,7 +11,10 @@ CATEGORY_KEYWORDS = {
             "yaralamalı kaza",
             "ölümlü kaza",
             "trafik kazasında",
-            "kaza yaptı"
+            "kaza yaptı",
+            "servis kazası",
+            "ölümüyle sonuçlanan kaza",
+            "zincirleme trafik kazası"
         ],
         "medium": [
             "kaza",
@@ -25,7 +26,12 @@ CATEGORY_KEYWORDS = {
             "otomobil ile",
             "motosiklet ile",
             "iki araç",
-            "araçlar çarpıştı"
+            "araçlar çarpıştı",
+            "bilirkişi raporu",
+            "kusurlu bulundu",
+            "kazaya ilişkin",
+            "kaza sonrası",
+            "kaza tespit"
         ]
     },
     "Yangın": {
@@ -70,7 +76,10 @@ CATEGORY_KEYWORDS = {
             "iş yerinden hırsızlık",
             "otomobil hırsızlığı",
             "hırsız yakalandı",
-            "hırsızlık şüphelisi"
+            "hırsızlık şüphelisi",
+            "hırsızlık suçundan",
+            "hırsızlık suçundan aranıyor",
+            "hırsızlık suçundan aranan"
         ],
         "medium": [
             "hırsızlık",
@@ -80,7 +89,11 @@ CATEGORY_KEYWORDS = {
             "soygun",
             "soydu",
             "gasp",
-            "kamera görüntüsü"
+            "kamera görüntüsü",
+            "aranan şahıs",
+            "aranan kişi",
+            "yakalandı",
+            "tutuklandı"
         ]
     },
     "Kültürel Etkinlikler": {
@@ -90,7 +103,14 @@ CATEGORY_KEYWORDS = {
             "festival başladı",
             "sergi açıldı",
             "tiyatro gösterisi",
-            "sahne aldı"
+            "sahne aldı",
+            "kütüphane haftası",
+            "dünya tiyatro günü",
+            "roman kahramanları",
+            "edebiyat günleri",
+            "kitap fuarı",
+            "ödül töreni",
+            "kültür sanat etkinliği"
         ],
         "medium": [
             "konser",
@@ -101,7 +121,26 @@ CATEGORY_KEYWORDS = {
             "gösteri",
             "sanat etkinliği",
             "müzik dinletisi",
-            "kültür sanat"
+            "kültür sanat",
+            "edebiyat",
+            "kitap",
+            "okurlar",
+            "kütüphane",
+            "kitap okuma",
+            "söyleşi",
+            "imza günü",
+            "şiir dinletisi",
+            "oratoryo",
+            "sahne",
+            "oyun",
+            "gala",
+            "prömiyer",
+            "atölye",
+            "gösterim",
+            "program",
+            "ödüllendirildi",
+            "ödül verildi",
+            "kültür merkezi"
         ]
     }
 }

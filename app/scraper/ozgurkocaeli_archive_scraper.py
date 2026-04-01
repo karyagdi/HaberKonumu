@@ -11,6 +11,11 @@ from app.db.mongo import get_news_collection
 from app.schemas.news_document import build_news_document
 from app.services.news_prefilter import classify_news
 from app.services.location_extractor import extract_location_info
+from app.services.text_cleaning import (
+    clean_extracted_text,
+    deduplicate_paragraphs,
+    is_noise_text,
+)
 
 
 BASE_URL = "https://www.ozgurkocaeli.com.tr"
@@ -141,6 +146,73 @@ def get_archive_links_and_previous_page(archive_url):
     return article_items, previous_day_url, None
 
 
+def find_main_content_container(soup):
+    selectors = [
+        "article",
+        ".news-detail",
+        ".detail-content",
+        ".post-content",
+        ".content-detail",
+        ".news-content",
+        ".article-content",
+        ".content",
+    ]
+
+    for selector in selectors:
+        container = soup.select_one(selector)
+        if container:
+            return container
+
+    return soup
+
+
+def extract_clean_content_parts(container, title):
+    raw_parts = []
+
+    stop_phrases = {
+        "Yazdır",
+        "Yorumlar",
+        "Yorumunuz",
+        "Topluluk Kuralları",
+        "Sosyal Sayfalar",
+        "GİRİŞ YAP",
+        "Muhabir",
+        "Haber Merkezi",
+        "Reklam seçeneklerimizi inceleyin",
+        "Veri Politikası",
+        "Kullanım Şartları",
+        "Tüm Hakları Saklıdır",
+        "KOGA A.Ş.",
+        "Medya Grubuna bağlı yayınlar",
+        "Resmi İlanlar",
+        "GALERİ",
+        "Haber ajansları tarafından servis edilen",
+        "Sitemize ajanslar üzerinden aktarılan",
+        "gösterim gerçekleşti",
+    }
+
+    for element in container.find_all(["p", "h2", "blockquote", "li"]):
+        text = clean_extracted_text(element.get_text(" ", strip=True))
+
+        if not text:
+            continue
+
+        if text == title:
+            continue
+
+        lower_text = text.lower()
+
+        if any(stop_phrase.lower() in lower_text for stop_phrase in stop_phrases):
+            break
+
+        if is_noise_text(text):
+            continue
+
+        raw_parts.append(text)
+
+    return deduplicate_paragraphs(raw_parts, title)
+
+
 def extract_article_data(article_url, publish_date):
     html, error = fetch_html(article_url)
     if not html:
@@ -153,26 +225,13 @@ def extract_article_data(article_url, publish_date):
         save_failed_url(article_url, "missing_title")
         return None, "missing_title"
 
-    title = title_tag.get_text(" ", strip=True)
+    title = clean_extracted_text(title_tag.get_text(" ", strip=True))
     if not title:
         save_failed_url(article_url, "empty_title")
         return None, "empty_title"
 
-    content_parts = []
-
-    for element in soup.find_all(["p", "h2", "blockquote"]):
-        text = element.get_text(" ", strip=True)
-
-        if not text:
-            continue
-
-        if text == title:
-            continue
-
-        if len(text) < 20:
-            continue
-
-        content_parts.append(text)
+    container = find_main_content_container(soup)
+    content_parts = extract_clean_content_parts(container, title)
 
     content = "\n\n".join(content_parts).strip()
 
