@@ -1,5 +1,3 @@
-# app/scraper/seskocaeli_archive_scraper.py
-
 import random
 import re
 import time
@@ -13,6 +11,11 @@ from app.db.mongo import get_news_collection
 from app.schemas.news_document import build_news_document
 from app.services.news_prefilter import classify_news
 from app.services.location_extractor import extract_location_info
+from app.services.text_cleaning import (
+    clean_extracted_text,
+    deduplicate_paragraphs,
+    is_noise_text,
+)
 
 
 BASE_URL = "https://www.seskocaeli.com"
@@ -127,6 +130,68 @@ def get_archive_links_and_previous_page(archive_url):
     return article_items, previous_day_url
 
 
+def find_main_content_container(soup):
+    selectors = [
+        "article",
+        ".news-detail",
+        ".detail-content",
+        ".post-content",
+        ".content-detail",
+        ".news-content",
+        ".article-content",
+        ".content",
+    ]
+
+    for selector in selectors:
+        container = soup.select_one(selector)
+        if container:
+            return container
+
+    return soup
+
+
+def extract_clean_content_parts(container, title):
+    raw_parts = []
+
+    stop_phrases = {
+        "Yazdır",
+        "Yorumlar",
+        "Topluluk Kuralları",
+        "Sosyal Sayfalar",
+        "Anket",
+        "GİRİŞ YAP",
+        "Yorumunuz",
+        "Reklam seçeneklerimizi inceleyin",
+        "Veri Politikası",
+        "Kullanım Şartları",
+        "Tüm Hakları Saklıdır",
+        "KOGA A.Ş.",
+        "Resmi İlanlar",
+        "GALERİ",
+    }
+
+    for element in container.find_all(["p", "h2", "blockquote", "li"]):
+        text = clean_extracted_text(element.get_text(" ", strip=True))
+
+        if not text:
+            continue
+
+        if text == title:
+            continue
+
+        lower_text = text.lower()
+
+        if any(stop_phrase.lower() in lower_text for stop_phrase in stop_phrases):
+            break
+
+        if is_noise_text(text):
+            continue
+
+        raw_parts.append(text)
+
+    return deduplicate_paragraphs(raw_parts, title)
+
+
 def extract_article_data(article_url, publish_date):
     html = fetch_html(article_url)
     if not html:
@@ -138,37 +203,12 @@ def extract_article_data(article_url, publish_date):
     if not title_tag:
         return None
 
-    title = title_tag.get_text(" ", strip=True)
+    title = clean_extracted_text(title_tag.get_text(" ", strip=True))
     if not title:
         return None
 
-    content_parts = []
-
-    stop_phrases = {
-        "Yazdır",
-        "Yorumlar",
-        "Topluluk Kuralları",
-        "Sosyal Sayfalar",
-        "Anket",
-        "GİRİŞ YAP"
-    }
-
-    for element in soup.find_all(["p", "h2", "blockquote"]):
-        text = element.get_text(" ", strip=True)
-
-        if not text:
-            continue
-
-        if text == title:
-            continue
-
-        if any(stop_phrase in text for stop_phrase in stop_phrases):
-            break
-
-        if len(text) < 20:
-            continue
-
-        content_parts.append(text)
+    container = find_main_content_container(soup)
+    content_parts = extract_clean_content_parts(container, title)
 
     content = "\n\n".join(content_parts).strip()
 
@@ -281,7 +321,7 @@ def run():
 
         if location_info["should_skip"]:
             location_filtered_out_count += 1
-            print("Kocaeli disi haber, DB'ye yazilmadi")
+            print("Konum/Kocaeli iliskisi nedeniyle DB'ye yazilmadi")
             continue
 
         article_data["location_text"] = location_info["location_text"]
